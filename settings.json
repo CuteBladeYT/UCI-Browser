@@ -1,0 +1,20 @@
+{
+    "homepage": "https://www.google.com",
+
+    "search_engine": {
+        "current": "google",
+
+        "google": "https://www.google.com/search?q=",
+        "duckduckgo": "https://www.duckduckgo.com/?q=",
+        "bing": "https://www.bing.com/search?q="
+    },
+
+    "startup": {
+        "maximized": false,
+        "size": [800, 600]
+    },
+
+    "misc": {
+        "max_page_title_length": 30
+    }
+}
