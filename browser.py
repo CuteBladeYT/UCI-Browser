@@ -1,11 +1,12 @@
 #!/bin/python3
 
 # libs, libs, libs
-import sys, os, json, urllib, platform
+import sys, os, json, urllib, platform, threading
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 import PyQt5.QtWebEngineWidgets as webengwid
+from PyQt5.QtWebEngineWidgets import QWebEngineView as webview
 
 # settings
 _sf = open("settings.json")
@@ -46,6 +47,10 @@ class App(QMainWindow):
         self.setWindowTitle(self.title)
         self.setGeometry(self.left, self.top, self.width, self.height)
         self.setWindowIcon(QIcon(f"./icon/i.{iconext}"))
+        self.mwid = QWidget(self) 
+        self.grlt = QGridLayout() 
+        self.mwid.setStyleSheet("background: #11111b;") 
+        self.mwid.setLayout(self.grlt)
 
         # if it's set to maximized in settings 
         # then do so
@@ -53,8 +58,10 @@ class App(QMainWindow):
             self.showMaximized()
 
 
-        # the actual browser
-        self.browser = webengwid.QWebEngineView()
+        # main view 
+        self.browser = webview() 
+        self.grlt.addWidget(self.browser, 0, 0, 0, 0)
+        self.prev_page = self.browser
 
         # navbar no. 1
         self.navbar = QToolBar()
@@ -80,10 +87,6 @@ class App(QMainWindow):
         self.browser_urlbar.returnPressed.connect(lambda: self.go_to_url(None))
         self.navbar.addWidget(self.browser_urlbar)
 
-        # on url changed / on title changed
-        self.browser.urlChanged.connect(lambda: self.set_urlbar_url(None))
-        self.browser.titleChanged.connect(lambda: self.setWindowTitle(self.browser.title() + " - UCI Browser"))
-
 
 
 
@@ -100,7 +103,7 @@ class App(QMainWindow):
 
         self.addToolBar(self.pagebar)
         self.addToolBar(self.navbar)
-        self.setCentralWidget(self.browser)
+        self.setCentralWidget(self.mwid)
         self.show()
 
 
@@ -118,13 +121,11 @@ class App(QMainWindow):
             urltg = self.browser_urlbar.text()
 
         # smart but dumb url checker 
-        if urltg.find(".") > 0 and urltg.find("/") > 0:
-            if not urltg.startswith("https://" or "http://"):
+        if urltg.find(".") > 0 and urltg.find("/") > 0 or urltg.startswith("www."):
+            if not urltg.startswith("https://") or not urltg.startswith("http://"):
                 urltg = "https://" + urltg
         else:
             urltg = BROWSER_SE + urllib.parse.quote(urltg)
-
-        # print(urltg) # debug purposes
 
         self.browser.setUrl(QUrl(urltg))
 
@@ -137,7 +138,7 @@ class App(QMainWindow):
             self.browser_urlbar.setText(_url)
             urll = _url
         else:
-            self.browser_urlbar.setText(url) 
+            self.browser_urlbar.setText(url)
 
         history = ""
 
@@ -164,25 +165,42 @@ class App(QMainWindow):
 
     # create new page
     def new_page(self, url):
-        page = webengwid.QWebEnginePage() 
+        page = webview()
         if url == None:
             url = HOMEPAGE_URL
         else: url = QUrl(url) 
 
         page.setUrl(url)
 
-        self.browser.setPage(page)
-
+        self.grlt.itemAt(0).widget().setParent(None) 
+        self.prev_page = page
+        self.browser = page
+        self.grlt.addWidget(page, 0, 0, 0, 0)
         
         acitem = QAction(url.toString()) 
-        acitem.triggered.connect(lambda: self.browser.setPage(page))
+        acitem.triggered.connect(lambda: self.switch_to_page(page))
         page.titleChanged.connect(lambda: self.set_page_title(page, acitem))
 
+        self.set_urlbar_url(url.toString())
+
         closebtn = QAction("-X|")
-        closebtn.triggered.connect(lambda: self.close_page(acitem, closebtn)) 
+        closebtn.triggered.connect(lambda: self.close_page(acitem, closebtn, page)) 
 
         self.pagebar.addAction(acitem)
         self.pagebar.addAction(closebtn)
+
+        # on url changed / on title changed
+        page.urlChanged.connect(lambda: self.set_urlbar_url(None))
+        page.titleChanged.connect(lambda: self.setWindowTitle(self.browser.title() + " - UCI Browser"))
+
+    def switch_to_page(self, page):
+        ppage = self.grlt.itemAt(0).widget() 
+        self.prev_page = ppage 
+        ppage.setParent(None)
+
+        self.browser = page
+        self.grlt.addWidget(page, 0, 0, 0, 0)
+        self.set_urlbar_url(page.url().toString())
 
     # set its title
     def set_page_title(self, page, acitem):
@@ -200,7 +218,14 @@ class App(QMainWindow):
 
     # and close the page
     # (yeah...)
-    def close_page(self, acitem, closebtn):
+    def close_page(self, acitem, closebtn, page):
+        page.close()
+        page.setParent(None) 
+
+        ppage = self.prev_page
+        self.browser = ppage 
+        self.grlt.addWidget(ppage, 0, 0, 0, 0)
+        
         self.pagebar.removeAction(acitem)
         self.pagebar.removeAction(closebtn)
 
