@@ -1,12 +1,12 @@
 {
-    "homepage": "https://www.google.com",
+    "homepage": "https://google.com",
 
     "search_engine": {
         "current": "google",
 
-        "google": "https://www.google.com/search?q=",
-        "duckduckgo": "https://www.duckduckgo.com/?q=",
-        "bing": "https://www.bing.com/search?q="
+        "google": "https://google.com/search?q=",
+        "duckduckgo": "https://duckduckgo.com/?q=",
+        "bing": "https://bing.com/search?q="
     },
 
     "startup": {

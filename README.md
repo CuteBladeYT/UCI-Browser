@@ -7,6 +7,7 @@
 | Python | >= 3.8 | [Python.org](https://www.python.org/downloads/) |
 | PyQt | `5.15.7`/`5.15.2` | `pip install PyQt5` |
 | PyQtWebEngine | Latest | `pip install PyQtWebEngine` |
+| requests | Latest | `pip install requests` |
 
 In CMD / Terminal:
 ```

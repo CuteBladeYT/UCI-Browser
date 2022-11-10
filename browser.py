@@ -2,16 +2,19 @@
 
 # libs, libs, libs
 import sys, os, json, urllib, platform, threading, requests
+from PyQt5 import QtCore
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 import PyQt5.QtWebEngineWidgets as webengwid
 from PyQt5.QtWebEngineWidgets import QWebEngineView as webview
 
-# settings
-_sf = open("settings.json")
-settings = json.loads(_sf.read())
-_sf.close()
+# modules
+sys.path.append(os.path.relpath("modules"))
+
+import tld_check, pages, settings_
+
+settings = settings_.check()
 
 
 # check for icon
@@ -28,46 +31,12 @@ if ismac: iconext = "icns"
 HOMEPAGE_URL = settings.get("homepage")
 
 # and here search engine
-BROWSER_SE = settings.get("search_engine").get(settings.get("search_engine").get("current"))
+SEARCH_ENGINE = settings.get("search_engine")
+CURR_SE = SEARCH_ENGINE.get("current")
+BROWSER_SE = SEARCH_ENGINE.get(CURR_SE)
 
-
-# all top-level domains 
-# also known as the two to three letters words after a dot
-# example: "https://www.google.com/"
-#                             ^^^^
-TLD_DOMAINS = []
-
-# get the domains from file 
-TLD_f = open("misc/tlds.txt", "r+")
-TLD_DOMAINS = TLD_f.read().split("\n") 
-TLD_f.close()
-
-
-# check for all top-level domains for intelligent url input 
-def __TLD_CLOUD_CHECK__():
-    # send request and download the content
-    _domains = requests.get("https://data.iana.org/TLD/tlds-alpha-by-domain.txt").content.decode("ascii") 
-
-    domains = ""
-
-    # remove all comments and leave domains only
-    for tld in _domains.split("\n"):
-        if not tld.startswith("#"):
-            domains += f"{tld}\n"
-
-
-    # save it to file 
-    if not domains == "":
-        f = open("misc/tlds.txt", "w+") 
-        f.write(domains) 
-        f.close() 
-
-def check_for_tlds(): 
-    # tld check thread to eventually prevent from the whole app's crashing 
-    # and simulatenuously check the domains and run the app
-    threading.Thread(None, __TLD_CLOUD_CHECK__).start()
-
-check_for_tlds()
+# check for all TLDs in cloud
+tld_check.check_for_tlds()
 
 
 
@@ -76,12 +45,16 @@ check_for_tlds()
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.BROWSER_SE = BROWSER_SE
+
+
+        STARTUP_SIZE = settings.get("startup").get("size")
         rect = app.primaryScreen().geometry()
         self.title = "UCI Browser"
-        self.width = settings.get("startup").get("size")[0]
-        self.height = settings.get("startup").get("size")[1]
-        self.top = rect.height() / 2 - self.height / 2
-        self.left = rect.width() / 2 - self.width / 2
+        self.width = int(STARTUP_SIZE[0])
+        self.height = int(STARTUP_SIZE[1])
+        self.top = int(rect.height() / 2 - self.height / 2)
+        self.left = int(rect.width() / 2 - self.width / 2)
         self.initUI()
 
     def initUI(self):
@@ -93,6 +66,8 @@ class App(QMainWindow):
         self.mwid.setStyleSheet("background: #11111b;") 
         self.mwid.setLayout(self.grlt)
 
+        self.grlt.setContentsMargins(QMargins(0, 0, 0, 0))
+
         # if it's set to maximized in settings 
         # then do so
         if settings.get("startup").get("maximized") == True:
@@ -100,7 +75,7 @@ class App(QMainWindow):
 
 
         # main view 
-        self.browser = webview() 
+        self.browser = webview()
         self.grlt.addWidget(self.browser, 0, 0, 0, 0)
         self.prev_page = self.browser
 
@@ -116,16 +91,16 @@ class App(QMainWindow):
         browser_gofwd.triggered.connect(self.browser.forward)
         self.navbar.addAction(browser_gofwd)
 
-        browser_reload = QAction("R", self)
+        browser_reload = QAction("↻", self)
         browser_reload.triggered.connect(self.browser.reload)
         self.navbar.addAction(browser_reload)
 
-        browser_gohome = QAction("H", self)
-        browser_gohome.triggered.connect(lambda: self.go_to_url(HOMEPAGE_URL))
+        browser_gohome = QAction("🏠", self)
+        browser_gohome.triggered.connect(lambda: pages.go_to_url(self, HOMEPAGE_URL))
         self.navbar.addAction(browser_gohome)
 
         self.browser_urlbar = QLineEdit()
-        self.browser_urlbar.returnPressed.connect(lambda: self.go_to_url(None))
+        self.browser_urlbar.returnPressed.connect(lambda: pages.go_to_url(self, None))
         self.navbar.addWidget(self.browser_urlbar)
 
 
@@ -133,12 +108,14 @@ class App(QMainWindow):
 
         # navbar no.2
         # actually pagebar, for tabs
-        self.pagebar = QToolBar() 
+        self.pagebar = QToolBar()
+        self.pagebar.move(0, 1)
 
         # button for opening new page
         newpagetab = QAction("+", self) 
-        newpagetab.triggered.connect(lambda: self.new_page(HOMEPAGE_URL))
+        newpagetab.triggered.connect(lambda: pages.new_page(self, HOMEPAGE_URL))
         self.pagebar.addAction(newpagetab)
+
 
 
 
@@ -147,136 +124,7 @@ class App(QMainWindow):
         self.setCentralWidget(self.mwid)
         self.show()
 
-
-        self.new_page(HOMEPAGE_URL)
-
-
-
-
-
-    # the code could just use self.browser.setUrl(), but 
-    # to comfortable use it some more ricing is needed
-    def go_to_url(self, url):
-        urltg = url
-        if url == None:
-            urltg = self.browser_urlbar.text()
-
-        # smart but dumb url checker 
-        tld_found = False
-        for tld in TLD_DOMAINS: 
-            tld = tld.casefold()
-            if urltg.casefold().find(f".{tld}") > 0:
-                if tld_found == False:
-                    if not urltg.startswith("https://") or not urltg.startswith("http://"):
-                        urltg = "https://" + urltg
-                tld_found = True
-        #else:
-        if tld_found == False:
-            urltg = BROWSER_SE + urllib.parse.quote(urltg)
-
-        self.browser.setUrl(QUrl(urltg))
-
-    # now when the url is changed sync it with 
-    # url bar
-    def set_urlbar_url(self, url):
-        urll = url
-        if url == None:
-            _url = self.browser.url().toString()
-            self.browser_urlbar.setText(_url)
-            urll = _url
-        else:
-            self.browser_urlbar.setText(url)
-
-        history = ""
-
-        # ...and save the URL to the history
-        if os.path.exists(f"{os.getcwd()}/history") == False:
-            _f = open("history", "w+")
-            _f.write("")
-            _f.close()
-        else:
-            _f = open("history", "r+")
-            history = _f.read() 
-            _f.close()
-
-        _hf = open("history", "w+")
-
-        history += "\n" + urll 
-
-        _hf.write(history) 
-        _hf.close()
-
-
-
-
-
-    # create new page
-    def new_page(self, url):
-        page = webview()
-        if url == None:
-            url = HOMEPAGE_URL
-        else: url = QUrl(url) 
-
-        page.setUrl(url)
-
-        self.grlt.itemAt(0).widget().setParent(None) 
-        self.prev_page = page
-        self.browser = page
-        self.grlt.addWidget(page, 0, 0, 0, 0)
-        
-        acitem = QAction(url.toString()) 
-        acitem.triggered.connect(lambda: self.switch_to_page(page))
-        page.titleChanged.connect(lambda: self.set_page_title(page, acitem))
-
-        self.set_urlbar_url(url.toString())
-
-        closebtn = QAction("-X|")
-        closebtn.triggered.connect(lambda: self.close_page(acitem, closebtn, page)) 
-
-        self.pagebar.addAction(acitem)
-        self.pagebar.addAction(closebtn)
-
-        # on url changed / on title changed
-        page.urlChanged.connect(lambda: self.set_urlbar_url(None))
-        page.titleChanged.connect(lambda: self.setWindowTitle(self.browser.title() + " - UCI Browser"))
-
-    def switch_to_page(self, page):
-        ppage = self.grlt.itemAt(0).widget() 
-        self.prev_page = ppage 
-        ppage.setParent(None)
-
-        self.browser = page
-        self.grlt.addWidget(page, 0, 0, 0, 0)
-        self.set_urlbar_url(page.url().toString())
-
-    # set its title
-    def set_page_title(self, page, acitem):
-        title = page.title()
-        _title = title
-
-        maxlen = settings.get("misc").get("max_page_title_length")
-
-        if len(title) > maxlen:
-            title = ""
-            for i in range(maxlen):
-                title += _title[i]
-
-        acitem.setText(title)
-
-    # and close the page
-    # (yeah...)
-    def close_page(self, acitem, closebtn, page):
-        page.close()
-        page.setParent(None) 
-
-        ppage = self.prev_page
-        self.browser = ppage 
-        self.grlt.addWidget(ppage, 0, 0, 0, 0)
-        
-        self.pagebar.removeAction(acitem)
-        self.pagebar.removeAction(closebtn)
-
-        
+        pages.new_page(self, HOMEPAGE_URL)
 
 if __name__ == "__main__":
     app = QApplication.instance()
